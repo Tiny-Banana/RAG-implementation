@@ -1,36 +1,22 @@
 import os
-import json
-import uuid
+from dotenv import load_dotenv
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
 from langchain_community.document_loaders import TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.documents import Document
-from langchain.retrievers.multi_vector import MultiVectorRetriever
-from langchain.storage import InMemoryByteStore
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_cohere import ChatCohere
 from langchain_cohere import CohereEmbeddings
 from langchain_core.output_parsers import JsonOutputParser
 from typing_extensions import TypedDict
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
+from langchain.load import dumps, loads
 
-os.environ['COHERE_API_KEY'] = "1pUAePYpYJWfTe5IZi7sgT4G11uIhppYpPwW3rsE"
-SUMMARY_CACHE_PATH = "./data/cache/summary.json"
-
-def load_summary():
-    if os.path.exists(SUMMARY_CACHE_PATH):
-        with open(SUMMARY_CACHE_PATH, 'r') as f:
-            return json.load(f)
-    else:
-        return None
-    
-def save_summary(summaries):
-    """Save summaries and embeddings to cache."""
-    with open(SUMMARY_CACHE_PATH, 'w') as f:
-        json.dump(summaries, f)
+load_dotenv()
+os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
 
 def answer_query(question):
     ### Load
@@ -39,51 +25,50 @@ def answer_query(question):
 
     ### LLM
     llm = ChatCohere(model="command-r", format="json", temperature=0)
-    embd = CohereEmbeddings(model="embed-english-light-v3.0")
 
-    ### Summary embedding
-    summaries = load_summary()
+    ### Embedding
+    # Split
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
 
-    if summaries is None:
-        chain = (
-            {"doc": lambda x: x.page_content}
-            | PromptTemplate(template="Summarize the following document:\n\n{doc}", input_variables=["doc"])
-            | llm
-            | StrOutputParser()
-        )
-        summaries = chain.batch(docs, {"max_concurrency": 5})
-        save_summary(summaries)
+    # Make splits
+    splits = text_splitter.split_documents(docs)
 
-    # The vectorstore to use to index the child chunks
-    vectorstore = Chroma(collection_name="summaries", embedding_function=embd)
-
-    # The storage layer for the parent documents
-    store = InMemoryByteStore()
-    id_key = "doc_id"
-
-    # The retriever
-    retriever = MultiVectorRetriever(
-        vectorstore=vectorstore,
-        byte_store=store,
-        id_key=id_key,
+    vectorstore = Chroma.from_documents(
+        documents=splits,
+        embedding=CohereEmbeddings(),
     )
-    doc_ids = [str(uuid.uuid4()) for _ in docs]
+    
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-    # Docs linked to summaries
-    summary_docs = [
-        Document(page_content=s, metadata={id_key: doc_ids[i]})
-        for i, s in enumerate(summaries)
-    ]
+    ### MultiQueryRetriever
+    mq_prompt = PromptTemplate(
+    input_variables=["question"],
+    template="""You are an AI language model assistant. Your task is to generate five 
+    different versions of the given user question to retrieve relevant documents from a vector 
+    database. By generating multiple perspectives on the user question, your goal is to help
+    the user overcome some of the limitations of the distance-based similarity search. 
+    Provide these alternative questions separated by newlines.
+    Original question: {question}""",)
+    generate_queries = mq_prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
+    # print(generate_queries.invoke(question))
 
-    # Add
-    retriever.vectorstore.add_documents(summary_docs)
-    retriever.docstore.mset(list(zip(doc_ids, docs)))
+    def get_unique_union(documents: list[list]):
+        """ Unique union of retrieved docs """
+        # Flatten list of lists, and convert each Document to string
+        flattened_docs = [dumps(doc) for sublist in documents for doc in sublist]
+        # Get unique documents
+        unique_docs = list(set(flattened_docs))
+        # Return
+        return [loads(doc) for doc in unique_docs]
 
+    retrieval_chain = generate_queries | retriever.map() | get_unique_union
+        
     ### Generate
     # Prompt
     prompt = PromptTemplate(
         template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an assistant for question-answering tasks. 
-        Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. 
+        Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know, and 
+        if there is no context provided, mention it. 
         <|eot_id|><|start_header_id|>user<|end_header_id|>
         Question: {question} 
         Context: {context} 
@@ -154,8 +139,7 @@ def answer_query(question):
         question = state["question"]
 
         # Retrieval
-        documents = vectorstore.similarity_search(question)
-        print(documents)
+        documents = retrieval_chain.invoke({"question":question})
         return {"documents": documents, "question": question}
 
     def generate(state):
