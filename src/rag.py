@@ -9,18 +9,18 @@ from langchain_core.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_cohere import ChatCohere
 from langchain_cohere import CohereEmbeddings
+from langchain.retrievers.multi_query import MultiQueryRetriever
 from langchain_core.output_parsers import JsonOutputParser
 from typing_extensions import TypedDict
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
-from langchain.load import dumps, loads
 
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
 
 def answer_query(question):
     ### Load
-    loader = DirectoryLoader("./data/raw", glob="./*.txt", loader_cls=TextLoader)
+    loader = DirectoryLoader("../data/raw", glob="./*.txt", loader_cls=TextLoader)
     docs = loader.load()
 
     ### LLM
@@ -38,30 +38,10 @@ def answer_query(question):
         embedding=CohereEmbeddings(),
     )
     
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
     ### MultiQueryRetriever
-    mq_prompt = PromptTemplate(
-    input_variables=["question"],
-    template="""You are an AI language model assistant. Your task is to generate five 
-    different versions of the given user question to retrieve relevant documents from a vector 
-    database. By generating multiple perspectives on the user question, your goal is to help
-    the user overcome some of the limitations of the distance-based similarity search. 
-    Provide these alternative questions separated by newlines.
-    Original question: {question}""",)
-    generate_queries = mq_prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
-    # print(generate_queries.invoke(question))
-
-    def get_unique_union(documents: list[list]):
-        """ Unique union of retrieved docs """
-        # Flatten list of lists, and convert each Document to string
-        flattened_docs = [dumps(doc) for sublist in documents for doc in sublist]
-        # Get unique documents
-        unique_docs = list(set(flattened_docs))
-        # Return
-        return [loads(doc) for doc in unique_docs]
-
-    retrieval_chain = generate_queries | retriever.map() | get_unique_union
+    retriever = MultiQueryRetriever.from_llm(
+    retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+    )
         
     ### Generate
     # Prompt
@@ -139,7 +119,7 @@ def answer_query(question):
         question = state["question"]
 
         # Retrieval
-        documents = retrieval_chain.invoke({"question":question})
+        documents = retriever.invoke({"question":question})
         return {"documents": documents, "question": question}
 
     def generate(state):
@@ -228,5 +208,4 @@ def answer_query(question):
     print("Sources: ")
     for doc in value["documents"]:
         print(doc.metadata)
-
-answer_query("What are the physical characteristics of lamu?")
+    return value["generation"]
