@@ -20,7 +20,7 @@ class ChatMessage(BaseModel):
 async def index():
     return {"Hello": "World"}
 
-@app.post("/ask")
+@app.post("/api/ask")
 async def ask(chat_message: ChatMessage):
     try:
         result = rag.answer_query(chat_message.message)

@@ -28,7 +28,7 @@ export default function Component() {
       const message: Message = { question: question, answer: null };
       setMessages((prevMessages) => [...prevMessages, message]);
       setIsGenerating(true);
-      const response = await axios.post("http://localhost:8000/ask", {
+      const response = await axios.post("/api/ask", {
         message: question,
       });
       setMessages((prevMessages) => {
