@@ -14,7 +14,7 @@ export default function Component() {
   const [question, setQuestion] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = async (event: any) => {
     try {
       event.preventDefault();
       setQuestion("");
@@ -60,7 +60,7 @@ export default function Component() {
               <path d="M9 13v2" />
             </svg>
           </div>
-          <div className="text-lg font-medium">ChatBot</div>
+          <div className="text-lg font-medium">RAGBot</div>
         </div>
       </header>
       <div className="flex-1 flex items-center justify-center p-4 space-y-4">

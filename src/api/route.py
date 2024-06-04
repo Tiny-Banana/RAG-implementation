@@ -26,4 +26,5 @@ async def ask(chat_message: ChatMessage):
         result = rag.answer_query(chat_message.message)
         return result
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail="Internal Server Error")

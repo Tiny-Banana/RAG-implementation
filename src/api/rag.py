@@ -20,7 +20,7 @@ os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
 
 def answer_query(question):
     ### Load
-    loader = DirectoryLoader("../data/raw", glob="./*.txt", loader_cls=TextLoader)
+    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
     docs = loader.load()
 
     ### LLM
