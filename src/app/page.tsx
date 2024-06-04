@@ -51,7 +51,7 @@ export default function Component() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 text-gray-50 overflow-y-auto">
-      <header className="flex items-center px-4 py-3 bg-gray-900 shadow">
+      <header className="flex items-center px-4 py-3 bg-gray-900 shadow sticky top-0 left-0 right-0 z-50">
         <div className="flex items-center gap-2">
           <div className="rounded-full bg-white text-black flex items-center justify-center w-8 h-8">
             <svg
@@ -183,7 +183,7 @@ export default function Component() {
       </div>
 
       <div ref={messageEndRef}></div>
-      <form onSubmit={handleSubmit} className="bg-gray-900 p-4">
+      <form onSubmit={handleSubmit} className="bg-gray-900 p-4 sticky bottom-0 left-0 right-0 z-50">
         <div className="relative max-w-2xl mx-auto">
           <Textarea
             placeholder="Type your message..."
