@@ -172,7 +172,7 @@ export default function Component() {
         <div className="relative max-w-2xl mx-auto">
           <Textarea
             placeholder="Type your message..."
-            className="w-full min-h-[48px] rounded-3xl bg-gray-800 text-gray-50 p-3 pr-12 resize-none"
+            className="w-full min-h-[50px] rounded-3xl bg-gray-800 text-gray-50 p-3 pr-12 resize-none"
             rows={1}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -191,7 +191,7 @@ export default function Component() {
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="size-5"
+              className="size-6"
             >
               <path
                 fillRule="evenodd"
