@@ -63,7 +63,7 @@ export default function Component() {
           <div className="text-lg font-medium">RAGBot</div>
         </div>
       </header>
-      <div className="flex-1 flex items-center justify-center p-4 space-y-4">
+      <div className="flex-1 flex items-center justify-center p-4 py-8 space-y-4">
         {messages.length !== 0 ? (
           <div className="max-w-2xl w-full space-y-4">
             {messages.map((message, index) => (
@@ -172,7 +172,7 @@ export default function Component() {
         <div className="relative max-w-2xl mx-auto">
           <Textarea
             placeholder="Type your message..."
-            className="w-full rounded-lg bg-gray-800 text-gray-50 p-3 pr-12 resize-none"
+            className="w-full min-h-[48px] rounded-3xl bg-gray-800 text-gray-50 p-3 pr-12 resize-none"
             rows={1}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
@@ -185,15 +185,19 @@ export default function Component() {
           <Button
             type="submit"
             size="icon"
-            className="absolute top-5 right-3 rounded-lg"
+            className="absolute top-2 right-3 rounded-full w-8 h-8 bg-gray-600"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="size-6 w-5 h-5 text-white"
+              className="size-5"
             >
-              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+              <path
+                fillRule="evenodd"
+                d="M11.47 2.47a.75.75 0 0 1 1.06 0l7.5 7.5a.75.75 0 1 1-1.06 1.06l-6.22-6.22V21a.75.75 0 0 1-1.5 0V4.81l-6.22 6.22a.75.75 0 1 1-1.06-1.06l7.5-7.5Z"
+                clipRule="evenodd"
+              />
             </svg>
           </Button>
         </div>
