@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
 import axios from "axios";
+import { useState, useEffect, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +13,13 @@ export default function Component() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const messageEndRef = useRef<HTMLInputElement>(null);
+
+  const scrollToBottom = () => {
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => scrollToBottom(), [messages]);
 
   const handleSubmit = async (event: any) => {
     try {
@@ -31,6 +38,13 @@ export default function Component() {
       });
       setIsGenerating(false);
     } catch (error) {
+      setMessages((prevMessages) => {
+        const updatedMessages = [...prevMessages];
+        updatedMessages[updatedMessages.length - 1].answer =
+          "An error has occured.";
+        return updatedMessages;
+      });
+      setIsGenerating(false);
       console.error("Error:", error);
     }
   };
@@ -168,6 +182,7 @@ export default function Component() {
         )}
       </div>
 
+      <div ref={messageEndRef}></div>
       <form onSubmit={handleSubmit} className="bg-gray-900 p-4">
         <div className="relative max-w-2xl mx-auto">
           <Textarea
@@ -191,7 +206,7 @@ export default function Component() {
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="size-6"
+              className="size-5"
             >
               <path
                 fillRule="evenodd"
