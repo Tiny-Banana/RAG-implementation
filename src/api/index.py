@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import HTTPException
-import rag
+import api.rag as rag
 
 app = FastAPI()
 app.add_middleware(
@@ -17,7 +17,7 @@ class ChatMessage(BaseModel):
     message: str
 
 @app.get("/")
-async def index():
+def index():
     return {"Hello": "World"}
 
 @app.post("/api/ask")
