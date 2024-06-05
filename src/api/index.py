@@ -5,8 +5,8 @@ from fastapi import HTTPException
 import rag
 
 origins = [
-    "http://localhost:3000", 
-    "https://lena-rag.vercel.app/",  
+    "http://localhost:3000",
+    "https://lena-rag.vercel.app",  
 ]
 
 app = FastAPI()
