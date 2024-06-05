@@ -28,7 +28,7 @@ export default function Component() {
       const message: Message = { question: question, answer: null };
       setMessages((prevMessages) => [...prevMessages, message]);
       setIsGenerating(true);
-      const response = await axios.post("/api/ask", {
+      const response = await axios.post("https://lena-rag.onrender.com/", {
         message: question,
       });
       setMessages((prevMessages) => {
