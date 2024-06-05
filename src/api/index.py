@@ -22,6 +22,7 @@ def index():
 
 @app.post("/api/ask")
 async def ask(chat_message: ChatMessage):
+    print(chat_message)
     try:
         result = rag.answer_query(chat_message.message)
         return result
