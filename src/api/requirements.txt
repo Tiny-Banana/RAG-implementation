@@ -10,4 +10,3 @@ pydantic
 chromadb
 typing_extensions
 uvicorn
-sqlite3 >= 3.35.0
