@@ -102,7 +102,7 @@ def answer_query(question):
             generation: LLM generation
             documents: list of documents
         """
-
+        retry: int
         question: str
         generation: str
         documents: List[str]
@@ -138,10 +138,19 @@ def answer_query(question):
         print("---GENERATE---")
         question = state["question"]
         documents = state["documents"]
+        retry =  state["retry"]
+
+        if retry is None:
+            retry = 0
+        else:
+            retry = retry + 1
 
         # RAG generation
-        generation = rag_chain.invoke({"context": documents, "question": question})
-        return {"documents": documents, "question": question, "generation": generation}
+        if (retry >= 2):  
+             generation = "RAGBot cannot produce a coherent response based on the corpus."
+        else:
+             generation = rag_chain.invoke({"context": documents, "question": question})
+        return {"documents": documents, "question": question, "generation": generation, "retry": retry}
 
     def grade_generation_v_documents_and_question(state):
         """
@@ -153,12 +162,17 @@ def answer_query(question):
         Returns:
             str: Decision for next node to call
         """
-
-        print("---CHECK HALLUCINATIONS---")
         question = state["question"]
         documents = state["documents"]
         generation = state["generation"]
+        retry = state["retry"]
 
+        # Check if retry count exceeds the limit
+        if (retry >= 2):   
+            print("Maximum retry limit reached. Stopping...")
+            return "stop"
+        
+        print("---CHECK HALLUCINATIONS---")
         score = hallucination_grader.invoke(
             {"documents": documents, "generation": generation}
         )
@@ -195,6 +209,7 @@ def answer_query(question):
         {
             "not supported": "generate",
             "supported": END,
+            "stop": END,
         },
     )
 
