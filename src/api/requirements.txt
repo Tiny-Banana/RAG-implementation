@@ -10,4 +10,4 @@ pydantic
 chromadb
 typing_extensions
 uvicorn
-
+pysqlite3-binary
