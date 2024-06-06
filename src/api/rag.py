@@ -104,6 +104,19 @@ def answer_query(question):
     )
     answer_grader = prompt | llm | JsonOutputParser()
 
+    ### Question Generator
+    # Prompt
+    prompt = PromptTemplate(
+        template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an assistant trying to help a user
+        generate 3 question that will help them understand the the following pieces of information below. Just output
+        the question and nothing else.
+        <|eot_id|><|start_header_id|>user<|end_header_id|>
+        Context: {context} 
+        Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        input_variables=["generation", "question"],
+    )
+    question_generator = prompt | llm | StrOutputParser()
+
     ### State
     class GraphState(TypedDict):
         """
@@ -164,6 +177,23 @@ def answer_query(question):
              generation = rag_chain.invoke({"context": documents, "question": question})
         return {"documents": documents, "question": question, "generation": generation, "retry": retry}
 
+    def generate_question(state):
+        """
+        Generate answer using RAG on retrieved documents
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): New key added to state, generation, that contains LLM generation
+        """
+        print("---GENERATE QUESTION---")
+        documents = state["documents"]
+
+        generation = "The database does not have a useful answer for that question. I have generated more relevant questions " \
+                     "that you may ask: \n" + question_generator.invoke({"context": documents})
+        return {"documents": documents, "question": state["question"], "generation": generation, "retry": state["retry"]}
+
     def grade_generation_v_documents_and_question(state):
         """
         Determines whether the generation is grounded in the document and answers question.
@@ -199,9 +229,10 @@ def answer_query(question):
             grade = score["score"]
             if grade == "yes" or grade == "1" or grade == 1:
                 print("---DECISION: GENERATION ADDRESSES QUESTION---")
+                return "supported"
             else:
                 print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-            return "supported"
+                return "question irrelevant"
         else:
             print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
             return "not supported"
@@ -211,15 +242,18 @@ def answer_query(question):
     # Define the nodes
     workflow.add_node("retrieve", retrieve)  # retrieve
     workflow.add_node("generate", generate)  # generate
+    workflow.add_node("generate_question", generate_question)  # generate
 
     # Build graph
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "generate")
+    workflow.add_edge("generate_question", END)
     workflow.add_conditional_edges(
         "generate",
         grade_generation_v_documents_and_question,
         {
             "not supported": "generate",
+            "question irrelevant": "generate_question",
             "supported": END,
             "stop": END,
         },
