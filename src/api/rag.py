@@ -17,6 +17,18 @@ from typing_extensions import TypedDict
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
+import chromadb
+from langchain.retrievers import (
+    ContextualCompressionRetriever,
+    MergerRetriever,
+)
+from langchain.retrievers.document_compressors import DocumentCompressorPipeline
+from langchain_community.document_transformers import (
+    EmbeddingsClusteringFilter,
+    EmbeddingsRedundantFilter,
+)
+from langchain_community.document_transformers import LongContextReorder
+
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
@@ -29,18 +41,53 @@ def answer_query(question):
     ### LLM
     llm = ChatCohere(model="command-r", format="json", temperature=0)
 
-    ### Embedding
-    # Split
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
-
-    # Make splits
-    splits = text_splitter.split_documents(docs)
-
-    vectorstore = Chroma.from_documents(
-        documents=splits,
-        embedding=CohereEmbeddings(),
+    client_settings = chromadb.config.Settings(
+        is_persistent=True,
+        persist_directory="chromadb",
+        anonymized_telemetry=False,
     )
-    
+
+    db_1 = Chroma(
+        collection_name="project_store_topic1",
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding_function=CohereEmbeddings(),
+    )
+    db_2 = Chroma(
+        collection_name="project_store_topic2",
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding_function=CohereEmbeddings(),
+    )
+
+    retriever_1 = db_1.as_retriever(
+        search_type="similarity", search_kwargs={"k": 5} # TODO this is setting itself to 2 im not sure why
+    )
+    retriever_2 = db_2.as_retriever(
+        search_type="similarity", search_kwargs={"k": 5}
+    )
+
+    lotr = MergerRetriever(retrievers=[retriever_1, retriever_2])
+
+
+    # TODO These are the process used in the DocumentCompressorPipeline. I think di na kailangan yung
+    #  filter_ordered_by_retriever since others don't implement it. Medyo mabagal kasi yung retrieval process
+    #  I guess test it out and see if it's worth.
+
+    filter = EmbeddingsRedundantFilter(embeddings=CohereEmbeddings())
+    filter_ordered_by_retriever = EmbeddingsClusteringFilter(
+        embeddings=CohereEmbeddings(),
+        num_clusters=2,
+        num_closest=1,
+        sorted=True,
+    )
+    reordering = LongContextReorder()
+
+    pipeline = DocumentCompressorPipeline(transformers=[filter, filter_ordered_by_retriever, reordering])
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=pipeline, base_retriever=lotr
+    )
+
     ### MultiQueryRetriever
     mq_prompt = PromptTemplate(
     input_variables=["question"],
@@ -52,8 +99,11 @@ def answer_query(question):
     Original question: {question}""",)
     generate_queries = mq_prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
     retriever = MultiQueryRetriever(
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 2}), llm_chain=generate_queries
+        retriever=compression_retriever, llm_chain=generate_queries
     )
+
+    retrieve_todoc = retriever | to_doc
+
     # retriever = MultiQueryRetriever.from_llm(
     # retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
     # )
@@ -147,7 +197,7 @@ def answer_query(question):
         question = state["question"]
 
         # Retrieval
-        documents = retriever.invoke({"question":question})
+        documents = retrieve_todoc.invoke({"question":question})
         return {"documents": documents, "question": question}
 
     def generate(state):
@@ -273,3 +323,5 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
+
+# populate_chroma_db()
