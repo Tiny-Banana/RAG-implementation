@@ -31,13 +31,49 @@ from langchain_community.document_transformers import LongContextReorder
 
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+def populate_chroma_db():
+    ### Load
+    loader_1 = DirectoryLoader("../../data/raw/topic1", glob="./*.txt", loader_cls=TextLoader)
+    docs1 = loader_1.load()
+    loader_2 = DirectoryLoader("../../data/raw/topic2", glob="./*.txt", loader_cls=TextLoader)
+    docs2 = loader_2.load()
+
+    ### Embedding
+    # Split
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
+
+    # Make splits
+    splits1 = text_splitter.split_documents(docs1)
+    splits2 = text_splitter.split_documents(docs2)
+
+    client_settings = chromadb.config.Settings(
+        is_persistent=True,
+        persist_directory="chromadb",
+        anonymized_telemetry=False,
+    )
+
+    Chroma.from_documents(
+        collection_name="project_store_topic1",
+        documents=splits1,
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding=CohereEmbeddings(),
+    )
+
+    Chroma.from_documents(
+        collection_name="project_store_topic2",
+        documents=splits2,
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding=CohereEmbeddings(),
+    )
+
+def to_doc(docs):
+    return [doc.to_document() for doc in docs]
 
 def answer_query(question):
-    ### Load
-    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
-    docs = loader.load()
-
     ### LLM
     llm = ChatCohere(model="command-r", format="json", temperature=0)
 
