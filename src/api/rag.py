@@ -191,13 +191,13 @@ def answer_query(question):
         grade = score["score"]
 
         # Check hallucination
-        if grade == "yes":
+        if grade == "yes" or grade == "1" or grade == 1:
             print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
             # Check question-answering
             print("---GRADE GENERATION vs QUESTION---")
             score = answer_grader.invoke({"question": question, "generation": generation})
             grade = score["score"]
-            if grade == "yes":
+            if grade == "yes" or grade == "1" or grade == 1:
                 print("---DECISION: GENERATION ADDRESSES QUESTION---")
             else:
                 print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
