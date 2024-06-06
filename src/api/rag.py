@@ -42,9 +42,21 @@ def answer_query(question):
     )
     
     ### MultiQueryRetriever
-    retriever = MultiQueryRetriever.from_llm(
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+    mq_prompt = PromptTemplate(
+    input_variables=["question"],
+    template="""You are an AI language model assistant. Your task is to generate five 
+    different versions of the given user question to retrieve relevant documents from a vector 
+    database. By generating multiple perspectives on the user question, your goal is to help
+    the user overcome some of the limitations of the distance-based similarity search. 
+    Provide these alternative questions. Output in a bullet list. Just output the bullet list and nothing else. Not even an intro text.
+    Original question: {question}""",)
+    generate_queries = mq_prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
+    retriever = MultiQueryRetriever(
+        retriever=vectorstore.as_retriever(search_kwargs={"k": 2}), llm_chain=generate_queries
     )
+    # retriever = MultiQueryRetriever.from_llm(
+    # retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+    # )
         
     ### Generate
     # Prompt
