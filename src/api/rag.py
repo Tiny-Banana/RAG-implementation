@@ -96,6 +96,11 @@ def answer_query(question):
         embedding_function=CohereEmbeddings(),
     )
 
+    # Te retriever is being set from 5 to 2. Acc. to gituhb https://github.com/langchain-ai/langchain/issues/2255
+    # This occurs when you have a limited number of documents in Chroma.
+    # By default, the retriever uses similarity_search, which has a default value of k=5.
+    # To address this, you can try adjusting the retriever's parameters or add documents or add number of splits
+    # You can test it out but I don't think we should change it na since I think it's the same performance
     retriever_1 = db_1.as_retriever(
         search_type="similarity", search_kwargs={"k": 5} # TODO this is setting itself to 2 im not sure why
     )
