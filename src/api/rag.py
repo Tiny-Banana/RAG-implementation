@@ -73,6 +73,11 @@ def populate_chroma_db():
 def to_doc(docs):
     return [doc.to_document() for doc in docs]
 
+def check_print(my_str):
+    print("THIS IS THE JSON OUTPUT \n")
+    print(repr(my_str))
+    return my_str
+
 def answer_query(question):
     ### LLM
     llm = ChatCohere(model="command-r", format="json", temperature=0)
@@ -178,7 +183,7 @@ def answer_query(question):
         Here is the answer: {generation}  <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
         input_variables=["generation", "documents"],
     )
-    hallucination_grader = prompt | llm | JsonOutputParser()
+    hallucination_grader = prompt | llm | check_print |JsonOutputParser()
 
     ### Answer Grader
     # Prompt
