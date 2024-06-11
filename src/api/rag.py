@@ -33,11 +33,20 @@ def answer_query(question):
     # Make splits
     splits = text_splitter.split_documents(docs)
 
-    vectorstore = Chroma.from_documents(
+    if os.path.isdir("store/"):
+        print("VectorDB exists")
+        vectorstore = Chroma(
+        persist_directory="chromadb",
+        embedding_function=CohereEmbeddings(),
+        )
+    else:
+        print("VectorDB doesn't exist. Creating one...")
+        vectorstore = Chroma.from_documents(
         documents=splits,
         embedding=CohereEmbeddings(),
-    )
-    
+        persist_directory="store/",
+        )   
+
     ### MultiQueryRetriever
     retriever = MultiQueryRetriever.from_llm(
     retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
@@ -210,4 +219,4 @@ def answer_query(question):
         print(doc.metadata)
     return value["generation"]
 
-answer_query("What is lamu?")
+answer_query("What is the connection between lamu and yang?")
