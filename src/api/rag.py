@@ -36,8 +36,9 @@ def answer_query(question):
     if os.path.isdir("store/"):
         print("VectorDB exists")
         vectorstore = Chroma(
-        persist_directory="chromadb",
+        persist_directory="store/",
         embedding_function=CohereEmbeddings(),
+        collection_metadata={"hnsw:space": "cosine"}
         )
     else:
         print("VectorDB doesn't exist. Creating one...")
@@ -45,40 +46,55 @@ def answer_query(question):
         documents=splits,
         embedding=CohereEmbeddings(),
         persist_directory="store/",
+        collection_metadata={"hnsw:space": "cosine"}
         )   
 
-    ### MultiQueryRetriever
-    retriever = MultiQueryRetriever.from_llm(
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+    ## MultiQueryRetriever
+    prompt = PromptTemplate(
+    input_variables=["question"],
+    template="""You are an AI language model assistant. Your task is to generate three 
+    different versions of the given user question to retrieve relevant documents from a vector 
+    database. By generating multiple perspectives on the user question, your goal is to help
+    the user overcome some of the limitations of the distance-based similarity search. 
+    Provide these alternative questions. Just output the bullet list without new lines and nothing else. Not even an intro text.
+    Original question: {question}""",)
+    generate_queries = prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
+    retriever = MultiQueryRetriever(
+        retriever=vectorstore.as_retriever(search_kwargs={"k": 3}), llm_chain=generate_queries
     )
-        
-    ### Generate
+
+    ## Generate
     # Prompt
     prompt = PromptTemplate(
-        template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an assistant for question-answering tasks. 
-        Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know, and 
-        if there is no context provided, mention it. 
-        <|eot_id|><|start_header_id|>user<|end_header_id|>
+        template="""You are an assistant for question-answering tasks. 
+        Use the following pieces of retrieved context to answer the question. If you don't know the answer, 
+        just say that you don't know, and if there is no context provided, mention it. 
         Question: {question} 
-        Context: {context} 
-        Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        Context: {context} """,
         input_variables=["question", "document"],
     )
-
     rag_chain = prompt | llm | StrOutputParser()
 
+    prompt = PromptTemplate(
+        template="""You are a large 
+        language model trained to have a polite, helpful, inclusive conversations with people. 
+        Question: {question} """,
+        input_variables=["question"],
+    )
+    llm_fallback_chain = prompt | llm | StrOutputParser()
+    
     ### Hallucination Grader
     # Prompt
     prompt = PromptTemplate(
-        template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether 
+        template="""You are a grader assessing whether 
         an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate 
         whether the answer is grounded in / supported by a set of facts. Provide the binary score 'yes' or 'no' as a JSON with a 
-        single key 'score' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
+        single key 'score' and no preamble or explanation.
         Here are the facts:
         \n ------- \n
         {documents} 
         \n ------- \n
-        Here is the answer: {generation}  <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        Here is the answer: {generation}""",
         input_variables=["generation", "documents"],
     )
     hallucination_grader = prompt | llm | JsonOutputParser()
@@ -86,14 +102,14 @@ def answer_query(question):
     ### Answer Grader
     # Prompt
     prompt = PromptTemplate(
-        template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether an 
+        template="""You are a grader assessing whether an 
         answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
         useful to resolve a question. Provide the binary score 'yes' or 'no' as a JSON with a single key 'score' and no preamble or explanation.
-        <|eot_id|><|start_header_id|>user<|end_header_id|> Here is the answer:
+        Here is the answer:
         \n ------- \n
         {generation} 
         \n ------- \n
-        Here is the question: {question} <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        Here is the question: {question}""",
         input_variables=["generation", "question"],
     )
     answer_grader = prompt | llm | JsonOutputParser()
@@ -124,6 +140,7 @@ def answer_query(question):
         Returns:
             state (dict): New key added to state, documents, that contains retrieved documents
         """
+        
         print("---RETRIEVE---")
         question = state["question"]
 
@@ -141,6 +158,7 @@ def answer_query(question):
         Returns:
             state (dict): New key added to state, generation, that contains LLM generation
         """
+
         print("---GENERATE---")
         question = state["question"]
         documents = state["documents"]
@@ -149,6 +167,47 @@ def answer_query(question):
         generation = rag_chain.invoke({"context": documents, "question": question})
         return {"documents": documents, "question": question, "generation": generation}
 
+    def llm_fallback(state):
+        """
+        Generate answer using the LLM w/o vectorstore
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): New key added to state, generation, that contains LLM generation
+        """
+
+        print("---LLM Fallback---")
+        question = state["question"]
+
+        generation = llm_fallback_chain.invoke({"question": question})
+        return {"question": question, "generation": generation, "documents": []}
+    
+    ### Edges
+    def route_question(state):
+        """
+        Route question to RAG or LLM fallback.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            st str: Next node to call
+        """
+        
+        print("---ROUTE QUESTION---")
+        question = state["question"]
+        similarity_score = vectorstore.similarity_search_with_relevance_scores(question)[0][1]
+        print("Similarity score:", similarity_score)
+
+        if similarity_score < 0.35:
+            print("---ROUTE QUESTION TO LLM---")
+            return "llm_fallback"
+        else:
+            print("---ROUTE QUESTION TO vectorstore---")
+            return "vectorstore"
+        
     def grade_generation_v_documents_and_question(state):
         """
         Determines whether the generation is grounded in the document and answers question.
@@ -179,9 +238,10 @@ def answer_query(question):
             grade = score["score"]
             if grade == "yes":
                 print("---DECISION: GENERATION ADDRESSES QUESTION---")
+                return "useful"
             else:
                 print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-            return "supported"
+                return "not useful"
         else:
             print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
             return "not supported"
@@ -190,20 +250,30 @@ def answer_query(question):
 
     # Define the nodes
     workflow.add_node("retrieve", retrieve)  # retrieve
-    workflow.add_node("generate", generate)  # generate
+    workflow.add_node("generate", generate)  # rag
+    workflow.add_node("llm_fallback", llm_fallback) # llm
 
     # Build graph
-    workflow.set_entry_point("retrieve")
+    workflow.set_conditional_entry_point(
+        route_question,
+        {
+            "vectorstore": "retrieve",
+            "llm_fallback": "llm_fallback",
+        },
+    )
     workflow.add_edge("retrieve", "generate")
     workflow.add_conditional_edges(
         "generate",
         grade_generation_v_documents_and_question,
         {
+            "useful": END,
+            "not useful": "llm_fallback",
             "not supported": "generate",
-            "supported": END,
         },
     )
+    workflow.add_edge("llm_fallback", END)
 
+    # Compile graph
     app = workflow.compile()
 
     # Test
@@ -218,5 +288,3 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
-
-answer_query("What is the connection between lamu and yang?")
