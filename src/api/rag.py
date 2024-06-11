@@ -1,6 +1,4 @@
-__import__('pysqlite3')
 import os
-import sys
 from dotenv import load_dotenv
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
@@ -19,11 +17,10 @@ from typing_extensions import TypedDict
 
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 def answer_query(question):
     ### Load
-    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
+    loader = DirectoryLoader("./data/raw", glob="./*.txt", loader_cls=TextLoader)
     docs = loader.load()
 
     ### LLM
@@ -66,7 +63,7 @@ def answer_query(question):
     prompt = PromptTemplate(
         template=""" <|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether 
         an answer is grounded in / supported by a set of facts. Give a binary 'yes' or 'no' score to indicate 
-        whether the answer is grounded in / supported by a set of facts. Provide the binary score as a JSON with a 
+        whether the answer is grounded in / supported by a set of facts. Provide the binary score 'yes' or 'no' as a JSON with a 
         single key 'score' and no preamble or explanation. <|eot_id|><|start_header_id|>user<|end_header_id|>
         Here are the facts:
         \n ------- \n
@@ -82,7 +79,7 @@ def answer_query(question):
     prompt = PromptTemplate(
         template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are a grader assessing whether an 
         answer is useful to resolve a question. Give a binary score 'yes' or 'no' to indicate whether the answer is 
-        useful to resolve a question. Provide the binary score as a JSON with a single key 'score' and no preamble or explanation.
+        useful to resolve a question. Provide the binary score 'yes' or 'no' as a JSON with a single key 'score' and no preamble or explanation.
         <|eot_id|><|start_header_id|>user<|end_header_id|> Here is the answer:
         \n ------- \n
         {generation} 
@@ -212,3 +209,5 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
+
+answer_query("What is lamu?")
