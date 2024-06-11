@@ -17,34 +17,142 @@ from typing_extensions import TypedDict
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
+import chromadb
+from langchain.retrievers import (
+    ContextualCompressionRetriever,
+    MergerRetriever,
+)
+from langchain.retrievers.document_compressors import DocumentCompressorPipeline
+from langchain_community.document_transformers import (
+    EmbeddingsClusteringFilter,
+    EmbeddingsRedundantFilter,
+)
+from langchain_community.document_transformers import LongContextReorder
+
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-def answer_query(question):
+def populate_chroma_db():
     ### Load
-    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
-    docs = loader.load()
-
-    ### LLM
-    llm = ChatCohere(model="command-r", format="json", temperature=0)
+    loader_1 = DirectoryLoader("../../data/raw/topic1", glob="./*.txt", loader_cls=TextLoader)
+    docs1 = loader_1.load()
+    loader_2 = DirectoryLoader("../../data/raw/topic2", glob="./*.txt", loader_cls=TextLoader)
+    docs2 = loader_2.load()
 
     ### Embedding
     # Split
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
 
     # Make splits
-    splits = text_splitter.split_documents(docs)
+    splits1 = text_splitter.split_documents(docs1)
+    splits2 = text_splitter.split_documents(docs2)
 
-    vectorstore = Chroma.from_documents(
-        documents=splits,
+    client_settings = chromadb.config.Settings(
+        is_persistent=True,
+        persist_directory="chromadb",
+        anonymized_telemetry=False,
+    )
+
+    Chroma.from_documents(
+        collection_name="project_store_topic1",
+        documents=splits1,
+        persist_directory="chromadb",
+        client_settings=client_settings,
         embedding=CohereEmbeddings(),
     )
-    
-    ### MultiQueryRetriever
-    retriever = MultiQueryRetriever.from_llm(
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+
+    Chroma.from_documents(
+        collection_name="project_store_topic2",
+        documents=splits2,
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding=CohereEmbeddings(),
     )
+
+def to_doc(docs):
+    return [doc.to_document() for doc in docs]
+
+def check_print(my_str):
+    print("THIS IS THE JSON OUTPUT \n")
+    print(repr(my_str))
+    return my_str
+
+def answer_query(question):
+    ### LLM
+    llm = ChatCohere(model="command-r", format="json", temperature=0)
+
+    client_settings = chromadb.config.Settings(
+        is_persistent=True,
+        persist_directory="chromadb",
+        anonymized_telemetry=False,
+    )
+
+    db_1 = Chroma(
+        collection_name="project_store_topic1",
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding_function=CohereEmbeddings(),
+    )
+    db_2 = Chroma(
+        collection_name="project_store_topic2",
+        persist_directory="chromadb",
+        client_settings=client_settings,
+        embedding_function=CohereEmbeddings(),
+    )
+
+    # Te retriever is being set from 5 to 2. Acc. to gituhb https://github.com/langchain-ai/langchain/issues/2255
+    # This occurs when you have a limited number of documents in Chroma.
+    # By default, the retriever uses similarity_search, which has a default value of k=5.
+    # To address this, you can try adjusting the retriever's parameters or add documents or add number of splits
+    # You can test it out but I don't think we should change it na since I think it's the same performance
+    retriever_1 = db_1.as_retriever(
+        search_type="similarity", search_kwargs={"k": 5} # TODO this is setting itself to 2 im not sure why
+    )
+    retriever_2 = db_2.as_retriever(
+        search_type="similarity", search_kwargs={"k": 5}
+    )
+
+    lotr = MergerRetriever(retrievers=[retriever_1, retriever_2])
+
+
+    # TODO These are the process used in the DocumentCompressorPipeline. I think di na kailangan yung
+    #  filter_ordered_by_retriever since others don't implement it. Medyo mabagal kasi yung retrieval process
+    #  I guess test it out and see if it's worth.
+
+    filter = EmbeddingsRedundantFilter(embeddings=CohereEmbeddings())
+    filter_ordered_by_retriever = EmbeddingsClusteringFilter(
+        embeddings=CohereEmbeddings(),
+        num_clusters=2,
+        num_closest=1,
+        sorted=True,
+    )
+    reordering = LongContextReorder()
+
+    pipeline = DocumentCompressorPipeline(transformers=[filter, filter_ordered_by_retriever, reordering])
+    compression_retriever = ContextualCompressionRetriever(
+        base_compressor=pipeline, base_retriever=lotr
+    )
+
+    ### MultiQueryRetriever
+    mq_prompt = PromptTemplate(
+    input_variables=["question"],
+    template="""You are an AI language model assistant. Your task is to generate five 
+    different versions of the given user question to retrieve relevant documents from a vector 
+    database. By generating multiple perspectives on the user question, your goal is to help
+    the user overcome some of the limitations of the distance-based similarity search. 
+    Provide these alternative questions. Output in a bullet list. Just output the bullet list and nothing else. Not even an intro text.
+    Original question: {question}""",)
+    generate_queries = mq_prompt | llm | StrOutputParser() | (lambda x: x.split("\n"))
+    retriever = MultiQueryRetriever(
+        retriever=compression_retriever, llm_chain=generate_queries
+    )
+
+    retrieve_todoc = retriever | to_doc
+
+    # retriever = MultiQueryRetriever.from_llm(
+    # retriever=vectorstore.as_retriever(search_kwargs={"k": 1}), llm=llm
+    # )
         
     ### Generate
     # Prompt
@@ -75,7 +183,7 @@ def answer_query(question):
         Here is the answer: {generation}  <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
         input_variables=["generation", "documents"],
     )
-    hallucination_grader = prompt | llm | JsonOutputParser()
+    hallucination_grader = prompt | llm | check_print |JsonOutputParser()
 
     ### Answer Grader
     # Prompt
@@ -91,6 +199,19 @@ def answer_query(question):
         input_variables=["generation", "question"],
     )
     answer_grader = prompt | llm | JsonOutputParser()
+
+    ### Question Generator
+    # Prompt
+    prompt = PromptTemplate(
+        template="""<|begin_of_text|><|start_header_id|>system<|end_header_id|> You are an assistant trying to help a user
+        generate 3 question that will help them understand the the following pieces of information below. Just output
+        the question and nothing else.
+        <|eot_id|><|start_header_id|>user<|end_header_id|>
+        Context: {context} 
+        Answer: <|eot_id|><|start_header_id|>assistant<|end_header_id|>""",
+        input_variables=["generation", "question"],
+    )
+    question_generator = prompt | llm | StrOutputParser()
 
     ### State
     class GraphState(TypedDict):
@@ -122,7 +243,7 @@ def answer_query(question):
         question = state["question"]
 
         # Retrieval
-        documents = retriever.invoke({"question":question})
+        documents = retrieve_todoc.invoke({"question":question})
         return {"documents": documents, "question": question}
 
     def generate(state):
@@ -152,6 +273,23 @@ def answer_query(question):
              generation = rag_chain.invoke({"context": documents, "question": question})
         return {"documents": documents, "question": question, "generation": generation, "retry": retry}
 
+    def generate_question(state):
+        """
+        Generate answer using RAG on retrieved documents
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): New key added to state, generation, that contains LLM generation
+        """
+        print("---GENERATE QUESTION---")
+        documents = state["documents"]
+
+        generation = "The database does not have a useful answer for that question. I have generated more relevant questions " \
+                     "that you may ask: \n" + question_generator.invoke({"context": documents})
+        return {"documents": documents, "question": state["question"], "generation": generation, "retry": state["retry"]}
+
     def grade_generation_v_documents_and_question(state):
         """
         Determines whether the generation is grounded in the document and answers question.
@@ -179,17 +317,18 @@ def answer_query(question):
         grade = score["score"]
 
         # Check hallucination
-        if grade == "yes":
+        if grade == "yes" or grade == "1" or grade == 1:
             print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
             # Check question-answering
             print("---GRADE GENERATION vs QUESTION---")
             score = answer_grader.invoke({"question": question, "generation": generation})
             grade = score["score"]
-            if grade == "yes":
+            if grade == "yes" or grade == "1" or grade == 1:
                 print("---DECISION: GENERATION ADDRESSES QUESTION---")
+                return "supported"
             else:
                 print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-            return "supported"
+                return "question irrelevant"
         else:
             print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
             return "not supported"
@@ -199,15 +338,18 @@ def answer_query(question):
     # Define the nodes
     workflow.add_node("retrieve", retrieve)  # retrieve
     workflow.add_node("generate", generate)  # generate
+    workflow.add_node("generate_question", generate_question)  # generate
 
     # Build graph
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "generate")
+    workflow.add_edge("generate_question", END)
     workflow.add_conditional_edges(
         "generate",
         grade_generation_v_documents_and_question,
         {
             "not supported": "generate",
+            "question irrelevant": "generate_question",
             "supported": END,
             "stop": END,
         },
@@ -227,3 +369,5 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
+
+# populate_chroma_db()
