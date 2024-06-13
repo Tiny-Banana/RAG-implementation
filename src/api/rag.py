@@ -1,4 +1,3 @@
-__import__('pysqlite3')
 import os
 import sys
 from dotenv import load_dotenv
@@ -23,7 +22,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 def answer_query(question):
     ### Load
-    loader = DirectoryLoader("./data/raw", glob="./*.txt", loader_cls=TextLoader)
+    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
     docs = loader.load()
 
     ### LLM
