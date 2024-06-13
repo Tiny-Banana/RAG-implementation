@@ -1,4 +1,6 @@
+__import__('pysqlite3')
 import os
+import sys
 from dotenv import load_dotenv
 from typing import List
 from langchain_community.document_loaders import DirectoryLoader
@@ -17,6 +19,7 @@ from typing_extensions import TypedDict
 
 load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 def answer_query(question):
     ### Load
@@ -322,3 +325,5 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
+
+answer_query("What is the average height of adult lang?")
