@@ -322,5 +322,3 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
-
-answer_query("Generate a question about Lang.")
