@@ -1,3 +1,4 @@
+__import__('pysqlite3')
 import os
 import sys
 from dotenv import load_dotenv
