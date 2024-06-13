@@ -71,7 +71,7 @@ def answer_query(question):
     prompt = PromptTemplate(
         template="""You are an assistant for question-answering tasks. 
         Use the following pieces of retrieved context to answer the question. If you don't know the answer, 
-        just say that you don't know, and if there is no context provided, mention it. 
+        just say that you don't know.
         Question: {question} 
         Context: {context} """,
         input_variables=["question", "document"],
@@ -81,6 +81,7 @@ def answer_query(question):
     prompt = PromptTemplate(
         template="""You are a large 
         language model trained to have a polite, helpful, inclusive conversations with people. 
+        If the question is related to lang, yang, lamu, 
         Don't explicitly say the contents of your training data and database.
         Question: {question} """,
         input_variables=["question"],
@@ -151,6 +152,7 @@ def answer_query(question):
         question: str
         generation: str
         documents: List[str]
+        retry: int
 
     ### Nodes
     def retrieve(state):
@@ -185,12 +187,24 @@ def answer_query(question):
         print("---GENERATE---")
         question = state["question"]
         documents = state["documents"]
-       
-        # RAG generation
-        generation = rag_chain.invoke({"context": documents, "question": question})
-        return {"documents": documents, "question": question, "generation": generation}
+        retry = state["retry"]
 
-    ### Edges
+        if retry is None:
+            retry = 0
+        else:
+            retry = retry + 1
+        
+        # RAG generation
+        if retry >= 2:
+            generation = (
+                "I'm sorry, but I cannot provide an answer that fully addresses your question. "
+                "Could you please provide more details or clarify your question, so I can assist you better?\n\n"
+                "Alternatively, I can help with questions about Lang, Yang, Lamu, and things about time travel "
+                "and temporal distortion. Could you please ask something related to those?")
+        else:
+            generation = rag_chain.invoke({"context": documents, "question": question})
+        return {"documents": documents, "question": question, "generation": generation, "retry": retry}
+
     def llm_fallback(state):
         """
         Generate answer using the LLM w/o vectorstore
@@ -253,12 +267,17 @@ def answer_query(question):
         Returns:
             str: Decision for next node to call
         """
-    
-        print("---CHECK HALLUCINATIONS---")
+
         question = state["question"]
         documents = state["documents"]
         generation = state["generation"]
+        retry = state["retry"]
 
+        if retry >=2:
+            print("Maximum retry limit reached. Stopping...")
+            return "max retry"
+
+        print("---CHECK HALLUCINATIONS---")
         score = hallucination_grader.invoke(
             {"documents": documents, "generation": generation}
         )
@@ -276,7 +295,6 @@ def answer_query(question):
                 return "useful"
             else:
                 print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-                print(generation)
                 return "not useful"
         else:
             print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
@@ -306,6 +324,7 @@ def answer_query(question):
             "useful": END,
             "not useful": "llm_fallback",
             "not supported": "generate",
+            "max retry": END,
         },
     )
     workflow.add_edge("llm_fallback", END)
