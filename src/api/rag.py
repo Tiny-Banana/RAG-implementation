@@ -325,5 +325,3 @@ def answer_query(question):
     for doc in value["documents"]:
         print(doc.metadata)
     return value["generation"]
-
-answer_query("What is the average height of adult lang?")
