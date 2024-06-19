@@ -88,7 +88,7 @@ export default function Component() {
                       key={index}
                       className="bg-blue-800 rounded-lg p-3 max-w-[80%]"
                     >
-                      <p>{message.question}</p>
+                      <p className="whitespace-pre-line">{message.question}</p>
                     </div>
                     <div className="rounded-full bg-gray-200 p-2">
                       <svg
@@ -150,7 +150,7 @@ export default function Component() {
                     </div>
 
                     <div className="bg-gray-800 rounded-lg p-3 max-w-[80%]">
-                      {message.answer}
+                      <p className="whitespace-pre-line">{message.answer}</p>
                     </div>
                   </div>
                 )}
