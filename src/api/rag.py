@@ -21,20 +21,9 @@ load_dotenv()
 os.environ['COHERE_API_KEY'] = os.getenv('API_KEY')
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-def answer_query(question):
-    ### Load
-    loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
-    docs = loader.load()
-
+def answer_query(question): 
     ### LLM
     llm = ChatCohere(model="command-r", format="json", temperature=0)
-
-    ### Embedding
-    # Split
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
-
-    # Make splits
-    splits = text_splitter.split_documents(docs)
 
     if os.path.isdir("store/"):
         print("VectorDB exists")
@@ -45,6 +34,16 @@ def answer_query(question):
         )
     else:
         print("VectorDB doesn't exist. Creating one...")
+         ### Load
+        loader = DirectoryLoader("../../data/raw", glob="./*.txt", loader_cls=TextLoader)
+        docs = loader.load()
+
+        ### Embedding
+        # Split
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=200)
+
+        # Make splits
+        splits = text_splitter.split_documents(docs)
         vectorstore = Chroma.from_documents(
         documents=splits,
         embedding=CohereEmbeddings(),
@@ -73,7 +72,7 @@ def answer_query(question):
         Use the following pieces of retrieved context to answer the question. If you don't know the answer, 
         just say that you don't know.
         Question: {question} 
-        Context: {context} """,
+        Context: {context}""",
         input_variables=["question", "document"],
     )
     rag_chain = prompt | llm | StrOutputParser()
@@ -168,7 +167,6 @@ def answer_query(question):
         
         print("---RETRIEVE---")
         question = state["question"]
-
         # Retrieval
         documents = retriever.invoke({"question": question})
         return {"documents": documents, "question": question}
@@ -282,7 +280,6 @@ def answer_query(question):
             {"documents": documents, "generation": generation}
         )
         grade = score["score"]
-
         # Check hallucination
         if grade == "yes":
             print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
