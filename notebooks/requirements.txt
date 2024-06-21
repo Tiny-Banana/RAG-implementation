@@ -1,0 +1,10 @@
+langchain
+langchain_cohere
+langchain_openai
+langchain_community
+sentence-transformers
+chromadb
+langgraph
+ragas
+tqdm
+datasets
