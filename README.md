@@ -1,7 +1,43 @@
 RAG-implementation
 ==============================
 
-A short description of the project.
+An implementation of a Retrieval-Augment-Generation (RAG) system where an LLM gives answers to a question based from a given database.
+
+**Live Website**: https://lena-rag.vercel.app/
+
+**Techstack**:
+- LLM: Cohere Command-R
+- Embedding Model: Cohere Embeddings
+- LangChain
+- LangGraph
+- FastAPI
+- NextJS
+
+**Database/Corpus**
+The corpus covers 2 topics.
+Topic 1: Lang Yang Lamu Symbiosis
+- Study of the symbiosis of three fictitious creatures
+    - Lang. Mythic wolf. Hunts down Yang. Urine nutritionally enhances Lamu Plant.
+    - Yang. Mythic sheep. Herbivore. When eating enhanced Lamu plant, its feces becomes great fertilizer
+    - Lamu. Miracle bloom. When eaten by Yangs, they gain a poisonous property lethal to Langs.
+Topic 2: Side effects of time travelling
+- Temporal disorientation/displacement
+    - Symptoms include “chrono-cultural shock”, stress and anxiety, and identity crises
+    - Coping mechanisms include journaling, meditation, etc.
+- Dr. Alexander Hayes
+    - Pioneered time travel together with his team.
+    - First to experience the side effects of time travelling
+
+**Pipeline**
+![image](https://github.com/Tiny-Banana/RAG-implementation/assets/71121771/d9fe6daa-92b6-4105-a43f-9059ce51e914)
+
+**Running the application**
+```console
+npm run dev
+uvicorn api.index:app --reload
+```
+Once running, go to address: localhost:3000
+
 
 Project Organization
 ------------
