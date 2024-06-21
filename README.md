@@ -20,6 +20,7 @@ Topic 1: Lang Yang Lamu Symbiosis
     - Lang. Mythic wolf. Hunts down Yang. Urine nutritionally enhances Lamu Plant.
     - Yang. Mythic sheep. Herbivore. When eating enhanced Lamu plant, its feces becomes great fertilizer
     - Lamu. Miracle bloom. When eaten by Yangs, they gain a poisonous property lethal to Langs.
+
 Topic 2: Side effects of time travelling
 - Temporal disorientation/displacement
     - Symptoms include “chrono-cultural shock”, stress and anxiety, and identity crises
